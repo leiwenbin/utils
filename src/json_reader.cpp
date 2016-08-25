@@ -1105,7 +1105,7 @@ namespace Json {
         Token token;
         skipCommentTokens(token);
         if (features_.failIfExtra_) {
-            if (token.type_ != tokenError && token.type_ != tokenEndOfStream) {
+            if ((features_.strictRoot_ || token.type_ != tokenError) && token.type_ != tokenEndOfStream) {
                 addError("Extra non-whitespace after JSON value.", token);
                 return false;
             }
@@ -1651,6 +1651,7 @@ namespace Json {
             Char buffer[bufferSize + 1];
             memcpy(buffer, token.start_, ulength);
             buffer[length] = 0;
+            fixNumericLocaleInput(buffer, buffer + length);
             count = sscanf(buffer, format, &value);
         } else {
             JSONCPP_STRING buffer(token.start_, token.end_);

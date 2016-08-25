@@ -12,17 +12,11 @@
 #endif // if !defined(JSON_IS_AMALGAMATION)
 
 #include <math.h>
-#include <sstream>
-#include <utility>
-#include <cstring>
 #include <cassert>
 
 #ifdef JSON_USE_CPPTL
 #include <cpptl/conststring.h>
 #endif
-
-#include <cstddef> // size_t
-#include <algorithm> // min()
 
 #define JSON_ASSERT_UNREACHABLE assert(false)
 
@@ -351,6 +345,7 @@ namespace Json {
  * This optimization is used in ValueInternalMap fast allocator.
  */
     Value::Value(ValueType vtype) {
+        static char const empty[] = "";
         initBasic(vtype);
         switch (vtype) {
             case nullValue:
@@ -363,7 +358,8 @@ namespace Json {
                 value_.real_ = 0.0;
                 break;
             case stringValue:
-                value_.string_ = 0;
+                // allocated_ == false, so this is safe.
+                value_.string_ = const_cast<char*>(static_cast<char const*>(empty));
                 break;
             case arrayValue:
             case objectValue:
@@ -510,8 +506,7 @@ namespace Json {
                 JSON_ASSERT_UNREACHABLE;
         }
 
-        if (comments_)
-            delete[] comments_;
+        delete[] comments_;
 
         value_.uint_ = 0;
     }
