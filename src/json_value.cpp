@@ -12,6 +12,7 @@
 #endif // if !defined(JSON_IS_AMALGAMATION)
 
 #include <math.h>
+#include <string.h>
 #include <cassert>
 
 #ifdef JSON_USE_CPPTL
