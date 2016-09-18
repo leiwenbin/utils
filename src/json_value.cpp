@@ -1500,12 +1500,12 @@ namespace Json {
                         index = index * 10 + ArrayIndex(*current - '0');
                     args_.push_back(index);
                 }
-                if (current == end || *current++ != ']')
+                if (current == end || *++current != ']')
                     invalidPath(path, int(current - path.c_str()));
             } else if (*current == '%') {
                 addPathInArg(path, in, itInArg, PathArgument::kindKey);
                 ++current;
-            } else if (*current == '.') {
+            } else if (*current == '.' || *current == ']') {
                 ++current;
             } else {
                 const char* beginName = current;
@@ -1525,7 +1525,7 @@ namespace Json {
         } else if ((*itInArg)->kind_ != kind) {
             // Error: bad argument type
         } else {
-            args_.push_back(**itInArg);
+            args_.push_back(**itInArg++);
         }
     }
 
@@ -1540,16 +1540,18 @@ namespace Json {
             if (arg.kind_ == PathArgument::kindIndex) {
                 if (!node->isArray() || !node->isValidIndex(arg.index_)) {
                     // Error: unable to resolve path (array value expected at position...
+                    return Value::null;
                 }
                 node = &((*node)[arg.index_]);
             } else if (arg.kind_ == PathArgument::kindKey) {
                 if (!node->isObject()) {
                     // Error: unable to resolve path (object value expected at position...)
+                    return Value::null;
                 }
                 node = &((*node)[arg.key_]);
                 if (node == &Value::nullSingleton()) {
-                    // Error: unable to resolve path (object has no member named '' at
-                    // position...)
+                    // Error: unable to resolve path (object has no member named '' at position...)
+                    return Value::null;
                 }
             }
         }
