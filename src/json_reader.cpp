@@ -401,7 +401,7 @@ namespace Json {
     }
 
     bool Reader::readCStyleComment() {
-        while (current_ != end_) {
+        while ((current_ + 1) < end_) {
             Char c = getNextChar();
             if (c == '*' && *current_ == '/')
                 break;
@@ -520,8 +520,7 @@ namespace Json {
         currentValue().swapPayload(init);
         currentValue().setOffsetStart(tokenStart.start_ - begin_);
         skipSpaces();
-        if (*current_ == ']') // empty array
-        {
+        if (current_ != end_ && *current_ == ']') { // empty array
             Token endArray;
             readToken(endArray);
             return true;
@@ -1401,7 +1400,7 @@ namespace Json {
     }
 
     bool OurReader::readCppStyleComment() {
-        while (current_ != end_) {
+        while ((current_ + 1) < end_) {
             Char c = getNextChar();
             if (c == '\n')
                 break;
