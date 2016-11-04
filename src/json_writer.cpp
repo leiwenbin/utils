@@ -145,7 +145,7 @@ namespace Json {
         JSONCPP_STRING valueToString(double value, bool useSpecialFloats, unsigned int precision) {
             // Allocate a buffer that is more than large enough to store the 16 digits of
             // precision requested below.
-            char buffer[32];
+            char buffer[36];
             int len = -1;
 
             char formatString[6];
@@ -156,6 +156,11 @@ namespace Json {
             // concepts of reals and integers.
             if (isfinite(value)) {
                 len = snprintf(buffer, sizeof(buffer), formatString, value);
+
+                // try to ensure we preserve the fact that this was given to us as a double on input
+                if (!strstr(buffer, ".") && !strstr(buffer, "e")) {
+                    strcat(buffer, ".0");
+                }
             } else {
                 // IEEE standard states that NaN values will not compare to themselves
                 if (value != value) {
