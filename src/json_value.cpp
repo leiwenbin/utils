@@ -304,7 +304,7 @@ namespace Json {
         // Assume both are strings.
         unsigned this_len = this->storage_.length_;
         unsigned other_len = other.storage_.length_;
-        unsigned min_len = std::min(this_len, other_len);
+        unsigned min_len = std::min<unsigned>(this_len, other_len);
         JSON_ASSERT(this->cstr_ && other.cstr_);
         int comp = memcmp(this->cstr_, other.cstr_, min_len);
         if (comp < 0) return true;
@@ -569,7 +569,7 @@ namespace Json {
                 char const* other_str;
                 decodePrefixedString((bool) this->allocated_, this->value_.string_, &this_len, &this_str);
                 decodePrefixedString((bool) other.allocated_, other.value_.string_, &other_len, &other_str);
-                unsigned min_len = std::min(this_len, other_len);
+                unsigned min_len = std::min<unsigned>(this_len, other_len);
                 JSON_ASSERT(this_str && other_str);
                 int comp = memcmp(this_str, other_str, min_len);
                 if (comp < 0) return true;
