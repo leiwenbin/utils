@@ -140,7 +140,7 @@ namespace Json {
         current_ = begin_;
         lastValueEnd_ = 0;
         lastValue_ = 0;
-        commentsBefore_ = "";
+        commentsBefore_.clear();
         errors_.clear();
         while (!nodes_.empty())
             nodes_.pop();
@@ -180,7 +180,7 @@ namespace Json {
 
         if (collectComments_ && !commentsBefore_.empty()) {
             currentValue().setComment(commentsBefore_, commentBefore);
-            commentsBefore_ = "";
+            commentsBefore_.clear();
         }
 
         switch (token.type_) {
@@ -475,7 +475,7 @@ namespace Json {
                 break;
             if (tokenName.type_ == tokenObjectEnd && name.empty()) // empty object
                 return true;
-            name = "";
+            name.clear();
             if (tokenName.type_ == tokenString) {
                 if (!decodeString(tokenName, name))
                     return recoverFromError(tokenObjectEnd);
@@ -1092,7 +1092,7 @@ namespace Json {
         current_ = begin_;
         lastValueEnd_ = 0;
         lastValue_ = 0;
-        commentsBefore_ = "";
+        commentsBefore_.clear();
         errors_.clear();
         while (!nodes_.empty())
             nodes_.pop();
@@ -1135,7 +1135,7 @@ namespace Json {
 
         if (collectComments_ && !commentsBefore_.empty()) {
             currentValue().setComment(commentsBefore_, commentBefore);
-            commentsBefore_ = "";
+            commentsBefore_.clear();
         }
 
         switch (token.type_) {
@@ -1479,7 +1479,7 @@ namespace Json {
                 break;
             if (tokenName.type_ == tokenObjectEnd && name.empty()) // empty object
                 return true;
-            name = "";
+            name.clear();
             if (tokenName.type_ == tokenString) {
                 if (!decodeString(tokenName, name))
                     return recoverFromError(tokenObjectEnd);

@@ -148,8 +148,8 @@ namespace Json {
             char buffer[36];
             int len = -1;
 
-            char formatString[6];
-            sprintf(formatString, "%%.%dg", precision);
+            char formatString[15];
+            snprintf(formatString, sizeof(formatString), "%%.%dg", precision);
 
             // Print into the buffer. We need not request the alternative representation
             // that always has a decimal point because JSON doesn't distingish the
@@ -341,7 +341,7 @@ namespace Json {
     void FastWriter::omitEndingLineFeed() { omitEndingLineFeed_ = true; }
 
     JSONCPP_STRING FastWriter::write(const Value& root) {
-        document_ = "";
+        document_.clear();
         writeValue(root);
         if (omitEndingLineFeed_)
             document_ += "\n";
@@ -410,9 +410,9 @@ namespace Json {
             : rightMargin_(74), indentSize_(3), addChildValues_() {}
 
     JSONCPP_STRING StyledWriter::write(const Value& root) {
-        document_ = "";
+        document_.clear();
         addChildValues_ = false;
-        indentString_ = "";
+        indentString_.clear();
         writeCommentBeforeValue(root);
         writeValue(root);
         writeCommentAfterValueOnSameLine(root);
@@ -626,7 +626,7 @@ namespace Json {
     void StyledStreamWriter::write(JSONCPP_OSTREAM& out, const Value& root) {
         document_ = &out;
         addChildValues_ = false;
-        indentString_ = "";
+        indentString_.clear();
         indented_ = true;
         writeCommentBeforeValue(root);
         if (!indented_) writeIndent();
@@ -910,7 +910,7 @@ namespace Json {
         sout_ = sout;
         addChildValues_ = false;
         indented_ = true;
-        indentString_ = "";
+        indentString_.clear();
         writeCommentBeforeValue(root);
         if (!indented_) writeIndent();
         indented_ = true;
@@ -1164,10 +1164,10 @@ namespace Json {
         }
         JSONCPP_STRING nullSymbol = "null";
         if (dnp) {
-            nullSymbol = "";
+            nullSymbol.clear();
         }
         if (pre > 17) pre = 17;
-        JSONCPP_STRING endingLineFeedSymbol = "";
+        JSONCPP_STRING endingLineFeedSymbol;
         return new BuiltStyledStreamWriter(
                 indentation, cs,
                 colonSymbol, nullSymbol, endingLineFeedSymbol, usf, pre);
@@ -1185,7 +1185,7 @@ namespace Json {
 
     bool StreamWriterBuilder::validate(Json::Value* invalid) const {
         Json::Value my_invalid;
-        if (!invalid) invalid = &my_invalid;  // so we do not need to test for NULL
+        if (NULL == invalid) invalid = &my_invalid;  // so we do not need to test for NULL
         Json::Value& inv = *invalid;
         std::set<JSONCPP_STRING> valid_keys;
         getValidWriterKeys(&valid_keys);
@@ -1197,7 +1197,7 @@ namespace Json {
                 inv[key] = settings_[key];
             }
         }
-        return 0u == inv.size();
+        return inv.empty();
     }
 
     Value& StreamWriterBuilder::operator[](JSONCPP_STRING key) {
