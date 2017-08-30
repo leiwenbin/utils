@@ -156,9 +156,10 @@ namespace Json {
             // concepts of reals and integers.
             if (isfinite(value)) {
                 len = snprintf(buffer, sizeof(buffer), formatString, value);
+                fixNumericLocale(buffer, buffer + len);
 
                 // try to ensure we preserve the fact that this was given to us as a double on input
-                if (!strstr(buffer, ".") && !strstr(buffer, "e")) {
+                if (!strchr(buffer, '.') && !strchr(buffer, 'e')) {
                     strcat(buffer, ".0");
                 }
             } else {
@@ -170,10 +171,8 @@ namespace Json {
                 } else {
                     len = snprintf(buffer, sizeof(buffer), useSpecialFloats ? "Infinity" : "1e+9999");
                 }
-                // For those, we do not need to call fixNumLoc, but it is fast.
             }
             assert(len >= 0);
-            fixNumericLocale(buffer, buffer + len);
             return buffer;
         }
     }
@@ -589,8 +588,7 @@ namespace Json {
         JSONCPP_STRING::const_iterator iter = comment.begin();
         while (iter != comment.end()) {
             document_ += *iter;
-            if (*iter == '\n' &&
-                (iter != comment.end() && *(iter + 1) == '/'))
+            if (*iter == '\n' && ((iter + 1) != comment.end() && *(iter + 1) == '/'))
                 writeIndent();
             ++iter;
         }
@@ -805,8 +803,7 @@ namespace Json {
         JSONCPP_STRING::const_iterator iter = comment.begin();
         while (iter != comment.end()) {
             *document_ << *iter;
-            if (*iter == '\n' &&
-                (iter != comment.end() && *(iter + 1) == '/'))
+            if (*iter == '\n' && ((iter + 1) != comment.end() && *(iter + 1) == '/'))
                 // writeIndent();  // would include newline
                 *document_ << indentString_;
             ++iter;
@@ -1096,8 +1093,7 @@ namespace Json {
         JSONCPP_STRING::const_iterator iter = comment.begin();
         while (iter != comment.end()) {
             *sout_ << *iter;
-            if (*iter == '\n' &&
-                (iter != comment.end() && *(iter + 1) == '/'))
+            if (*iter == '\n' && ((iter + 1) != comment.end() && *(iter + 1) == '/'))
                 // writeIndent();  // would write extra newline
                 *sout_ << indentString_;
             ++iter;

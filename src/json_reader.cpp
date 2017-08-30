@@ -84,7 +84,7 @@ namespace Json {
 // Implementation of class Reader
 // ////////////////////////////////
 
-    static bool containsNewLine(Reader::Location begin, Reader::Location end) {
+    bool Reader::containsNewLine(Reader::Location begin, Reader::Location end) {
         for (; begin < end; ++begin)
             if (*begin == '\n' || *begin == '\r')
                 return true;
@@ -106,8 +106,7 @@ namespace Json {
 
     bool
     Reader::parse(const std::string& document, Value& root, bool collectComments) {
-        JSONCPP_STRING documentCopy(document.data(), document.data() + document.capacity());
-        std::swap(documentCopy, document_);
+        document_.assign(document.begin(), document.end());
         const char* begin = document_.c_str();
         const char* end = begin + document_.length();
         return parse(begin, end, root, collectComments);
@@ -371,7 +370,7 @@ namespace Json {
         return true;
     }
 
-    static JSONCPP_STRING normalizeEOL(Reader::Location begin, Reader::Location end) {
+    JSONCPP_STRING Reader::normalizeEOL(Reader::Location begin, Reader::Location end) {
         JSONCPP_STRING normalized;
         normalized.reserve(static_cast<size_t>(end - begin));
         Reader::Location current = begin;
@@ -1056,6 +1055,10 @@ namespace Json {
 
         void skipCommentTokens(Token& token);
 
+        static JSONCPP_STRING normalizeEOL(Location begin, Location end);
+
+        static bool containsNewLine(Location begin, Location end);
+
         typedef std::stack<Value*> Nodes;
         Nodes nodes_;
         Errors errors_;
@@ -1072,6 +1075,13 @@ namespace Json {
     };  // OurReader
 
 // complete copy of Read impl, for OurReader
+
+    bool OurReader::containsNewLine(OurReader::Location begin, OurReader::Location end) {
+        for (; begin < end; ++begin)
+            if (*begin == '\n' || *begin == '\r')
+                return true;
+        return false;
+    }
 
     OurReader::OurReader(OurFeatures const& features)
             : errors_(), document_(), begin_(), end_(), current_(), lastValueEnd_(),
@@ -1376,8 +1386,26 @@ namespace Json {
         return true;
     }
 
-    void
-    OurReader::addComment(Location begin, Location end, CommentPlacement placement) {
+    JSONCPP_STRING OurReader::normalizeEOL(OurReader::Location begin, OurReader::Location end) {
+        JSONCPP_STRING normalized;
+        normalized.reserve(static_cast<size_t>(end - begin));
+        OurReader::Location current = begin;
+        while (current != end) {
+            char c = *current++;
+            if (c == '\r') {
+                if (current != end && *current == '\n')
+                    // convert dos EOL
+                    ++current;
+                // convert Mac EOL
+                normalized += '\n';
+            } else {
+                normalized += c;
+            }
+        }
+        return normalized;
+    }
+
+    void OurReader::addComment(Location begin, Location end, CommentPlacement placement) {
         assert(collectComments_);
         const JSONCPP_STRING& normalized = normalizeEOL(begin, end);
         if (placement == commentAfterOnSameLine) {

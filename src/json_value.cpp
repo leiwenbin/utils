@@ -293,10 +293,20 @@ namespace Json {
         std::swap(index_, other.index_);
     }
 
-    Value::CZString& Value::CZString::operator=(CZString other) {
-        swap(other);
+    Value::CZString& Value::CZString::operator=(const CZString& other) {
+        cstr_ = other.cstr_;
+        index_ = other.index_;
         return *this;
     }
+
+#if JSON_HAS_RVALUE_REFERENCES
+    Value::CZString& Value::CZString::operator=(CZString&& other) {
+    cstr_ = other.cstr_;
+    index_ = other.index_;
+    other.cstr_ = nullptr;
+    return *this;
+}
+#endif
 
     bool Value::CZString::operator<(const CZString& other) const {
         if (!cstr_) return index_ < other.index_;
@@ -345,7 +355,8 @@ namespace Json {
  * memset( this, 0, sizeof(Value) )
  * This optimization is used in ValueInternalMap fast allocator.
  */
-    Value::Value(ValueType vtype) {
+    Value::Value(ValueType
+                 vtype) {
         static char const empty[] = "";
         initBasic(vtype);
         switch (vtype) {
@@ -374,24 +385,28 @@ namespace Json {
         }
     }
 
-    Value::Value(Int value) {
+    Value::Value(Int
+                 value) {
         initBasic(intValue);
         value_.int_ = value;
     }
 
-    Value::Value(UInt value) {
+    Value::Value(UInt
+                 value) {
         initBasic(uintValue);
         value_.uint_ = value;
     }
 
 #if defined(JSON_HAS_INT64)
 
-    Value::Value(Int64 value) {
+    Value::Value(Int64
+                 value) {
         initBasic(intValue);
         value_.int_ = value;
     }
 
-    Value::Value(UInt64 value) {
+    Value::Value(UInt64
+                 value) {
         initBasic(uintValue);
         value_.uint_ = value;
     }
@@ -528,11 +543,24 @@ namespace Json {
         other.allocated_ = temp2 & 0x1;
     }
 
+    void Value::copyPayload(const Value& other) {
+        type_ = other.type_;
+        value_ = other.value_;
+        allocated_ = other.allocated_;
+    }
+
     void Value::swap(Value& other) {
         swapPayload(other);
         std::swap(comments_, other.comments_);
         std::swap(start_, other.start_);
         std::swap(limit_, other.limit_);
+    }
+
+    void Value::copy(const Value& other) {
+        copyPayload(other);
+        comments_ = other.comments_;
+        start_ = other.start_;
+        limit_ = other.limit_;
     }
 
     ValueType Value::type() const { return type_; }
@@ -1123,6 +1151,10 @@ namespace Json {
 
     Value& Value::append(const Value& value) { return (*this)[size()] = value; }
 
+#if JSON_HAS_RVALUE_REFERENCES
+    Value& Value::append(Value&& value) { return (*this)[size()] = value; }
+#endif
+
     Value Value::get(char const* key, char const* cend, Value const& defaultValue) const {
         Value const* found = find(key, cend);
         return !found ? defaultValue : *found;
@@ -1159,8 +1191,7 @@ namespace Json {
     }
 
     Value Value::removeMember(const char* key) {
-        JSON_ASSERT_MESSAGE(type_ == nullValue || type_ == objectValue,
-                            "in Json::Value::removeMember(): requires objectValue");
+        JSON_ASSERT_MESSAGE(type_ == nullValue || type_ == objectValue, "in Json::Value::removeMember(): requires objectValue");
         if (type_ == nullValue)
             return nullSingleton();
 
@@ -1426,8 +1457,13 @@ namespace Json {
     ptrdiff_t Value::getOffsetLimit() const { return limit_; }
 
     JSONCPP_STRING Value::toStyledString() const {
-        StyledWriter writer;
-        return writer.write(*this);
+        StreamWriterBuilder builder;
+
+        JSONCPP_STRING out = this->hasComment(commentBefore) ? "\n" : "";
+        out += Json::writeString(builder, *this);
+        out += "\n";
+
+        return out;
     }
 
     Value::const_iterator Value::begin() const {
