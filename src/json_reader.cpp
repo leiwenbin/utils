@@ -2064,15 +2064,20 @@ namespace Json {
 //////////////////////////////////
 // global functions
 
-    bool parseFromStream(
-            CharReader::Factory const& fact, JSONCPP_ISTREAM& sin,
-            Value* root, JSONCPP_STRING* errs) {
+    bool parseFromStream(CharReader::Factory const& fact, JSONCPP_ISTREAM& sin, Value* root, JSONCPP_STRING* errs) {
         JSONCPP_OSTRINGSTREAM ssin;
         ssin << sin.rdbuf();
         JSONCPP_STRING doc = ssin.str();
         char const* begin = doc.data();
         char const* end = begin + doc.size();
         // Note that we do not actually need a null-terminator.
+        CharReaderPtr const reader(fact.newCharReader());
+        return reader->parse(begin, end, root, errs);
+    }
+
+    bool parseFromString(CharReader::Factory const& fact, JSONCPP_STRING& doc, Value* root, JSONCPP_STRING* errs) {
+        char const* begin = doc.data();
+        char const* end = begin + doc.size();
         CharReaderPtr const reader(fact.newCharReader());
         return reader->parse(begin, end, root, errs);
     }
