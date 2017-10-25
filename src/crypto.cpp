@@ -37,6 +37,11 @@ int Crypto::InitRsa() {
     rsaLocalPubKey = RSA_new();
     rsaLocalPriKey = RSA_new();
 
+    RSA* rsa = RSA_generate_key(1024, RSA_F4, NULL, NULL);
+    rsaLocalPubKey = RSAPublicKey_dup(rsa);
+    rsaLocalPriKey = RSAPrivateKey_dup(rsa);
+    RSA_free(rsa);
+
     return SUCCESS;
 }
 
@@ -162,6 +167,42 @@ int Crypto::RsaDecrypt(const unsigned char* encMsg, size_t encMsgLen, unsigned c
     return RSA_private_decrypt((int) encMsgLen, encMsg, *decMsg, rsaLocalPriKey, RSA_PKCS1_PADDING);
 }
 
+int Crypto::RsaSignByLocalPriKey(const unsigned char* text, unsigned char** signature) {
+    if (NULL == text)
+        return FAILURE;
+    unsigned char sha1[20] = {0};
+    unsigned int signature_size;
+    SHA1(text, strlen((const char*) text), sha1);
+    *signature = (unsigned char*) malloc((size_t) RSA_size(rsaLocalPriKey));
+    if (1 != RSA_sign(NID_sha1, sha1, 20, *signature, &signature_size, rsaLocalPriKey))
+        return FAILURE;
+
+    return signature_size;
+
+}
+
+int Crypto::RsaVerifyByLocalPubKey(const unsigned char* text, const unsigned char* signature) {
+    if (NULL == text || NULL == signature)
+        return FAILURE;
+    unsigned char sha1[20] = {0};
+    SHA1(text, strlen((const char*) text), sha1);
+    if (1 != RSA_verify(NID_sha1, sha1, 20, signature, 128, rsaLocalPubKey))
+        return FAILURE;
+
+    return SUCCESS;
+}
+
+int Crypto::RsaVerifyByRemotePubKey(const unsigned char* text, const unsigned char* signature) {
+    if (NULL == text || NULL == signature)
+        return FAILURE;
+    unsigned char sha1[20] = {0};
+    SHA1(text, strlen((const char*) text), sha1);
+    if (1 != RSA_verify(NID_sha1, sha1, 20, signature, 128, rsaRemotePubKey))
+        return FAILURE;
+
+    return SUCCESS;
+}
+
 int Crypto::SetRsaLocalPubKey(unsigned char* key, size_t keyLen) {
     BIO* bio = BIO_new(BIO_s_mem());
 
@@ -199,11 +240,11 @@ int Crypto::SetRsaRemotePubKey(unsigned char* key, size_t keyLen) {
 int Crypto::WriteKeyToFile(FILE* fd, int key) {
     switch (key) {
         case KEY_REMOTE_PUB:
-            if (!PEM_write_RSA_PUBKEY(fd, rsaRemotePubKey))
+            if (!PEM_write_RSAPublicKey(fd, rsaRemotePubKey))
                 return FAILURE;
             break;
         case KEY_LOCAL_PUB:
-            if (!PEM_write_RSA_PUBKEY(fd, rsaLocalPubKey))
+            if (!PEM_write_RSAPublicKey(fd, rsaLocalPubKey))
                 return FAILURE;
             break;
         case KEY_LOCAL_PRI:
@@ -234,4 +275,21 @@ int Crypto::GenerateAesIv() {
         return FAILURE;
 
     return SUCCESS;
+}
+
+void Crypto::ShowRsa(unsigned char** pub, unsigned char** pri) {
+    *pub = (unsigned char*) malloc((size_t) RSA_size(rsaLocalPubKey) + 1);
+    memset(*pub, 0, (size_t) RSA_size(rsaLocalPubKey) + 1);
+    BIO* bio_pub = BIO_new(BIO_s_mem());
+    PEM_write_bio_RSAPublicKey(bio_pub, rsaLocalPubKey);
+    BIO_read(bio_pub, *pub, RSA_size(rsaLocalPubKey));
+
+    *pri = (unsigned char*) malloc((size_t) RSA_size(rsaLocalPriKey) + 1);
+    memset(*pri, 0, (size_t) RSA_size(rsaLocalPriKey) + 1);
+    BIO* bio_pri = BIO_new(BIO_s_mem());
+    PEM_write_bio_RSAPrivateKey(bio_pri, rsaLocalPriKey, NULL, NULL, 0, 0, NULL);
+    BIO_read(bio_pri, *pri, RSA_size(rsaLocalPriKey));
+
+    BIO_free_all(bio_pub);
+    BIO_free_all(bio_pri);
 }
