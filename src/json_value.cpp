@@ -1152,7 +1152,7 @@ namespace Json {
     Value& Value::append(const Value& value) { return (*this)[size()] = value; }
 
 #if JSON_HAS_RVALUE_REFERENCES
-    Value& Value::append(Value&& value) { return (*this)[size()] = value; }
+    Value& Value::append(Value&& value) { return (*this)[size()] = std::move(value); }
 #endif
 
     Value Value::get(char const* key, char const* cend, Value const& defaultValue) const {
@@ -1190,18 +1190,16 @@ namespace Json {
         return removeMember(key.data(), key.data() + key.length(), removed);
     }
 
-    Value Value::removeMember(const char* key) {
+    void Value::removeMember(const char* key) {
         JSON_ASSERT_MESSAGE(type_ == nullValue || type_ == objectValue, "in Json::Value::removeMember(): requires objectValue");
         if (type_ == nullValue)
-            return nullSingleton();
-
-        Value removed;  // null
-        removeMember(key, key + strlen(key), &removed);
-        return removed; // still null if removeMember() did nothing
+            return;
+        CZString actualKey(key, unsigned(strlen(key)), CZString::noDuplication);
+        value_.map_->erase(actualKey);
     }
 
-    Value Value::removeMember(const JSONCPP_STRING& key) {
-        return removeMember(key.c_str());
+    void Value::removeMember(const JSONCPP_STRING& key) {
+        removeMember(key.c_str());
     }
 
     bool Value::removeIndex(ArrayIndex index, Value* removed) {

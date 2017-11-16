@@ -2086,13 +2086,8 @@ namespace Json {
         CharReaderBuilder b;
         JSONCPP_STRING errs;
         bool ok = parseFromStream(b, sin, &root, &errs);
-        if (!ok) {
-            fprintf(stderr,
-                    "Error from reader: %s",
-                    errs.c_str());
-
+        if (!ok)
             throwRuntimeError(errs);
-        }
         return sin;
     }
 
