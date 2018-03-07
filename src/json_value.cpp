@@ -453,46 +453,10 @@ namespace Json {
         value_.bool_ = value;
     }
 
-    Value::Value(Value const& other)
-            : type_(other.type_), allocated_(false),
-              comments_(0), start_(other.start_), limit_(other.limit_) {
-        switch (type_) {
-            case nullValue:
-            case intValue:
-            case uintValue:
-            case realValue:
-            case booleanValue:
-                value_ = other.value_;
-                break;
-            case stringValue:
-                if (other.value_.string_ && other.allocated_) {
-                    unsigned len;
-                    char const* str;
-                    decodePrefixedString((bool) other.allocated_, other.value_.string_,
-                                         &len, &str);
-                    value_.string_ = duplicateAndPrefixStringValue(str, len);
-                    allocated_ = true;
-                } else {
-                    value_.string_ = other.value_.string_;
-                    allocated_ = false;
-                }
-                break;
-            case arrayValue:
-            case objectValue:
-                value_.map_ = new ObjectValues(*other.value_.map_);
-                break;
-            default:
-                JSON_ASSERT_UNREACHABLE;
-        }
-        if (other.comments_) {
-            comments_ = new CommentInfo[numberOfCommentPlacement];
-            for (int comment = 0; comment < numberOfCommentPlacement; ++comment) {
-                const CommentInfo& otherComment = other.comments_[comment];
-                if (otherComment.comment_)
-                    comments_[comment].setComment(
-                            otherComment.comment_, strlen(otherComment.comment_));
-            }
-        }
+    Value::Value(const Value& other) {
+        dupPayload(other);
+        dupMeta(other);
+
     }
 
 #if JSON_HAS_RVALUE_REFERENCES
@@ -504,27 +468,8 @@ namespace Json {
 #endif
 
     Value::~Value() {
-        switch (type_) {
-            case nullValue:
-            case intValue:
-            case uintValue:
-            case realValue:
-            case booleanValue:
-                break;
-            case stringValue:
-                if (allocated_)
-                    releasePrefixedStringValue(value_.string_);
-                break;
-            case arrayValue:
-            case objectValue:
-                delete value_.map_;
-                break;
-            default:
-                JSON_ASSERT_UNREACHABLE;
-        }
-
+        releasePayload();
         delete[] comments_;
-
         value_.uint_ = 0;
     }
 
@@ -544,9 +489,8 @@ namespace Json {
     }
 
     void Value::copyPayload(const Value& other) {
-        type_ = other.type_;
-        value_ = other.value_;
-        allocated_ = other.allocated_;
+        releasePayload();
+        dupPayload(other);
     }
 
     void Value::swap(Value& other) {
@@ -558,9 +502,8 @@ namespace Json {
 
     void Value::copy(const Value& other) {
         copyPayload(other);
-        comments_ = other.comments_;
-        start_ = other.start_;
-        limit_ = other.limit_;
+        delete[] comments_;
+        dupMeta(other);
     }
 
     ValueType Value::type() const { return type_; }
@@ -968,7 +911,7 @@ namespace Json {
             return false;
     }
 
-    bool Value::operator!() const { return isNull(); }
+    Value::operator bool() const { return !isNull(); }
 
     void Value::clear() {
         JSON_ASSERT_MESSAGE(type_ == nullValue || type_ == arrayValue ||
@@ -995,7 +938,7 @@ namespace Json {
         if (newSize == 0)
             clear();
         else if (newSize > oldSize)
-            (*this)[newSize - 1];
+            this->operator[](newSize - 1);
         else {
             for (ArrayIndex index = newSize; index < oldSize; ++index) {
                 value_.map_->erase(index);
@@ -1055,9 +998,78 @@ namespace Json {
         limit_ = 0;
     }
 
-// Access an object value by name, create a null member if it does not exist.
-// @pre Type of '*this' is object or null.
-// @param key is null-terminated.
+    void Value::dupPayload(const Value& other) {
+        type_ = other.type_;
+        allocated_ = false;
+        switch (type_) {
+            case nullValue:
+            case intValue:
+            case uintValue:
+            case realValue:
+            case booleanValue:
+                value_ = other.value_;
+                break;
+            case stringValue:
+                if (other.value_.string_ && other.allocated_) {
+                    unsigned len;
+                    char const* str;
+                    decodePrefixedString(other.allocated_, other.value_.string_,
+                                         &len, &str);
+                    value_.string_ = duplicateAndPrefixStringValue(str, len);
+                    allocated_ = true;
+                } else {
+                    value_.string_ = other.value_.string_;
+                }
+                break;
+            case arrayValue:
+            case objectValue:
+                value_.map_ = new ObjectValues(*other.value_.map_);
+                break;
+            default:
+                JSON_ASSERT_UNREACHABLE;
+        }
+    }
+
+    void Value::releasePayload() {
+        switch (type_) {
+            case nullValue:
+            case intValue:
+            case uintValue:
+            case realValue:
+            case booleanValue:
+                break;
+            case stringValue:
+                if (allocated_)
+                    releasePrefixedStringValue(value_.string_);
+                break;
+            case arrayValue:
+            case objectValue:
+                delete value_.map_;
+                break;
+            default:
+                JSON_ASSERT_UNREACHABLE;
+        }
+    }
+
+    void Value::dupMeta(const Value& other) {
+        if (other.comments_) {
+            comments_ = new CommentInfo[numberOfCommentPlacement];
+            for (int comment = 0; comment < numberOfCommentPlacement; ++comment) {
+                const CommentInfo& otherComment = other.comments_[comment];
+                if (otherComment.comment_)
+                    comments_[comment].setComment(
+                            otherComment.comment_, strlen(otherComment.comment_));
+            }
+        } else {
+            comments_ = 0;
+        }
+        start_ = other.start_;
+        limit_ = other.limit_;
+    }
+
+    // Access an object value by name, create a null member if it does not exist.
+    // @pre Type of '*this' is object or null.
+    // @param key is null-terminated.
     Value& Value::resolveReference(const char* key) {
         JSON_ASSERT_MESSAGE(
                 type_ == nullValue || type_ == objectValue,
@@ -1177,7 +1189,12 @@ namespace Json {
         ObjectValues::iterator it = value_.map_->find(actualKey);
         if (it == value_.map_->end())
             return false;
-        *removed = it->second;
+        if (removed)
+#if JSON_HAS_RVALUE_REFERENCES
+            *removed = std::move(it->second);
+#else
+            *removed = it->second;
+#endif
         value_.map_->erase(it);
         return true;
     }

@@ -131,10 +131,10 @@ namespace Json {
             int len = -1;
 
             char formatString[15];
-            snprintf(formatString, sizeof(formatString), "%%.%dg", precision);
+            snprintf(formatString, sizeof(formatString), "%%.%ug", precision);
 
             // Print into the buffer. We need not request the alternative representation
-            // that always has a decimal point because JSON doesn't distingish the
+            // that always has a decimal point because JSON doesn't distinguish the
             // concepts of reals and integers.
             if (isfinite(value)) {
                 len = snprintf(buffer, sizeof(buffer), formatString, value);
@@ -204,7 +204,7 @@ namespace Json {
             s += 2;
             // surrogates aren't valid codepoints itself
             // shouldn't be UTF-8 encoded
-            if (calculated >= 0xD800 && calculated >= 0xDFFF)
+            if (calculated >= 0xD800 && calculated <= 0xDFFF)
                 return REPLACEMENT_CHARACTER;
             // oversized encoded characters are invalid
             return calculated < 0x800 ? REPLACEMENT_CHARACTER : calculated;
@@ -214,7 +214,7 @@ namespace Json {
             if (e - s < 4)
                 return REPLACEMENT_CHARACTER;
 
-            unsigned int calculated = ((firstByte & 0x07) << 24)
+            unsigned int calculated = ((firstByte & 0x07) << 18)
                                       | ((static_cast<unsigned int>(s[1]) & 0x3F) << 12)
                                       | ((static_cast<unsigned int>(s[2]) & 0x3F) << 6)
                                       | (static_cast<unsigned int>(s[3]) & 0x3F);
@@ -337,10 +337,9 @@ namespace Json {
     // //////////////////////////////////////////////////////////////////
 
     FastWriter::FastWriter()
-            : yamlCompatiblityEnabled_(false), dropNullPlaceholders_(false),
-              omitEndingLineFeed_(false) {}
+            : yamlCompatibilityEnabled_(false), dropNullPlaceholders_(false), omitEndingLineFeed_(false) {}
 
-    void FastWriter::enableYAMLCompatibility() { yamlCompatiblityEnabled_ = true; }
+    void FastWriter::enableYAMLCompatibility() { yamlCompatibilityEnabled_ = true; }
 
     void FastWriter::dropNullPlaceholders() { dropNullPlaceholders_ = true; }
 
@@ -400,7 +399,7 @@ namespace Json {
                     if (it != members.begin())
                         document_ += ',';
                     document_ += valueToQuotedStringN(name.data(), static_cast<unsigned>(name.length()));
-                    document_ += yamlCompatiblityEnabled_ ? ": " : ":";
+                    document_ += yamlCompatibilityEnabled_ ? ": " : ":";
                     writeValue(value[name]);
                 }
                 document_ += '}';
@@ -490,7 +489,7 @@ namespace Json {
         if (size == 0)
             pushValue("[]");
         else {
-            bool isArrayMultiLine = isMultineArray(value);
+            bool isArrayMultiLine = isMultilineArray(value);
             if (isArrayMultiLine) {
                 writeWithIndent("[");
                 indent();
@@ -528,7 +527,7 @@ namespace Json {
         }
     }
 
-    bool StyledWriter::isMultineArray(const Value& value) {
+    bool StyledWriter::isMultilineArray(const Value& value) {
         ArrayIndex const size = value.size();
         bool isMultiLine = size * 3 >= rightMargin_;
         childValues_.clear();
@@ -625,8 +624,7 @@ namespace Json {
 // //////////////////////////////////////////////////////////////////
 
     StyledStreamWriter::StyledStreamWriter(JSONCPP_STRING indentation)
-            : document_(NULL), rightMargin_(74), indentation_(indentation),
-              addChildValues_() {}
+            : document_(NULL), rightMargin_(74), indentation_(indentation), addChildValues_(), indented_(false) {}
 
     void StyledStreamWriter::write(JSONCPP_OSTREAM& out, const Value& root) {
         document_ = &out;
@@ -706,7 +704,7 @@ namespace Json {
         if (size == 0)
             pushValue("[]");
         else {
-            bool isArrayMultiLine = isMultineArray(value);
+            bool isArrayMultiLine = isMultilineArray(value);
             if (isArrayMultiLine) {
                 writeWithIndent("[");
                 indent();
@@ -746,7 +744,7 @@ namespace Json {
         }
     }
 
-    bool StyledStreamWriter::isMultineArray(const Value& value) {
+    bool StyledStreamWriter::isMultilineArray(const Value& value) {
         ArrayIndex const size = value.size();
         bool isMultiLine = size * 3 >= rightMargin_;
         childValues_.clear();
@@ -865,7 +863,7 @@ namespace Json {
 
         void writeArrayValue(Value const& value);
 
-        bool isMultineArray(Value const& value);
+        bool isMultilineArray(Value const& value);
 
         void pushValue(JSONCPP_STRING const& value);
 
@@ -989,7 +987,7 @@ namespace Json {
         if (size == 0)
             pushValue("[]");
         else {
-            bool isMultiLine = (cs_ == CommentStyle::All) || isMultineArray(value);
+            bool isMultiLine = (cs_ == CommentStyle::All) || isMultilineArray(value);
             if (isMultiLine) {
                 writeWithIndent("[");
                 indent();
@@ -1031,7 +1029,7 @@ namespace Json {
         }
     }
 
-    bool BuiltStyledStreamWriter::isMultineArray(Value const& value) {
+    bool BuiltStyledStreamWriter::isMultilineArray(Value const& value) {
         ArrayIndex const size = value.size();
         bool isMultiLine = size * 3 >= rightMargin_;
         childValues_.clear();
