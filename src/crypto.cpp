@@ -4,7 +4,7 @@
 
 using namespace std;
 
-Crypto::Crypto() : aesEncryptCtx(NULL), aesDecryptCtx(NULL), aesKey(NULL), aesIv(NULL), rsaRemotePubKey(NULL), rsaLocalPubKey(NULL), rsaLocalPriKey(NULL), bits(0) {
+Crypto::Crypto() : aesEncryptCtx(NULL), aesDecryptCtx(NULL), aesKey(NULL), aesIv(NULL), rsaRemotePubKey(NULL), rsaLocalPubKey(NULL), rsaLocalPriKey(NULL), bits(0), aesInitState(false) {
 
 }
 
@@ -15,6 +15,17 @@ Crypto::~Crypto() {
 }
 
 int Crypto::InitAes() {
+    return this->InitAes256(SECURITY_LEVEL::low);
+}
+
+int Crypto::InitAes256(SECURITY_LEVEL securityLevel) {
+    if (this->aesInitState)
+        return FAILURE;
+
+    int keyUnit = 8;
+    if (securityLevel == SECURITY_LEVEL::low)
+        keyUnit = 16;
+
     this->aesEncryptCtx = EVP_CIPHER_CTX_new();
     this->aesDecryptCtx = EVP_CIPHER_CTX_new();
     if (NULL == aesEncryptCtx || NULL == this->aesDecryptCtx)
@@ -23,22 +34,24 @@ int Crypto::InitAes() {
     EVP_CIPHER_CTX_init(this->aesEncryptCtx);
     EVP_CIPHER_CTX_init(this->aesDecryptCtx);
 
-    this->aesKey = (unsigned char*) malloc(AES_KEYLEN / 16);
-    this->aesIv = (unsigned char*) malloc(AES_KEYLEN / 16);
+    this->aesKey = (unsigned char*) malloc(AES_KEYLEN / keyUnit);
+    this->aesIv = (unsigned char*) malloc(AES_KEYLEN / keyUnit);
 
-    memset(this->aesKey, 0, AES_KEYLEN / 16);
-    memset(this->aesIv, 0, AES_KEYLEN / 16);
+    memset(this->aesKey, 0, AES_KEYLEN / keyUnit);
+    memset(this->aesIv, 0, AES_KEYLEN / keyUnit);
+
+    this->aesInitState = true;
 
     return SUCCESS;
 }
 
-int Crypto::InitRsa(unsigned int bits) {
-    this->bits = bits;
+int Crypto::InitRsa(unsigned int b) {
+    this->bits = b;
 
     BIGNUM* e = BN_new();
     BN_set_word(e, RSA_F4);
 
-    RSA *rsa = RSA_new();
+    RSA* rsa = RSA_new();
     RSA_generate_key_ex(rsa, this->bits, e, NULL);
 
     this->rsaLocalPubKey = RSAPublicKey_dup(rsa);
@@ -87,6 +100,10 @@ void Crypto::FreeRsa() {
 }
 
 int Crypto::AesEncrypt(const unsigned char* msg, size_t msgLen, unsigned char** encMsg) {
+    return this->AesEncrypt256(msg, msgLen, encMsg, SECURITY_LEVEL::low);
+}
+
+int Crypto::AesEncrypt256(const unsigned char* msg, size_t msgLen, unsigned char** encMsg, SECURITY_LEVEL securityLevel) {
     if (NULL == this->aesEncryptCtx || NULL == this->aesKey || NULL == this->aesIv)
         return FAILURE;
 
@@ -95,7 +112,11 @@ int Crypto::AesEncrypt(const unsigned char* msg, size_t msgLen, unsigned char** 
 
     *encMsg = (unsigned char*) malloc(msgLen + AES_BLOCK_SIZE);
 
-    if (!EVP_EncryptInit_ex(this->aesEncryptCtx, EVP_aes_128_cbc(), NULL, this->aesKey, this->aesIv))
+    const EVP_CIPHER* evpCipher = EVP_aes_256_cbc();
+    if (securityLevel == SECURITY_LEVEL::low)
+        evpCipher = EVP_aes_128_cbc();
+
+    if (!EVP_EncryptInit(this->aesEncryptCtx, evpCipher, this->aesKey, this->aesIv))
         return FAILURE;
 
     if (!EVP_EncryptUpdate(this->aesEncryptCtx, *encMsg, (int*) &blockLen, (unsigned char*) msg, (int) msgLen))
@@ -110,6 +131,10 @@ int Crypto::AesEncrypt(const unsigned char* msg, size_t msgLen, unsigned char** 
 }
 
 int Crypto::AesDecrypt(unsigned char* encMsg, size_t encMsgLen, unsigned char** decMsg) {
+    return this->AesDecrypt256(encMsg, encMsgLen, decMsg, SECURITY_LEVEL::low);
+}
+
+int Crypto::AesDecrypt256(unsigned char* encMsg, size_t encMsgLen, unsigned char** decMsg, SECURITY_LEVEL securityLevel) {
     if (NULL == this->aesEncryptCtx || NULL == this->aesKey || NULL == this->aesIv)
         return FAILURE;
 
@@ -118,7 +143,11 @@ int Crypto::AesDecrypt(unsigned char* encMsg, size_t encMsgLen, unsigned char** 
 
     *decMsg = (unsigned char*) malloc(encMsgLen);
 
-    if (!EVP_DecryptInit_ex(this->aesDecryptCtx, EVP_aes_128_cbc(), NULL, this->aesKey, this->aesIv))
+    const EVP_CIPHER* evpCipher = EVP_aes_256_cbc();
+    if (securityLevel == SECURITY_LEVEL::low)
+        evpCipher = EVP_aes_128_cbc();
+
+    if (!EVP_DecryptInit(this->aesDecryptCtx, evpCipher, this->aesKey, this->aesIv))
         return FAILURE;
 
     if (!EVP_DecryptUpdate(this->aesDecryptCtx, *decMsg, (int*) &blockLen, encMsg, (int) encMsgLen))
@@ -133,19 +162,35 @@ int Crypto::AesDecrypt(unsigned char* encMsg, size_t encMsgLen, unsigned char** 
 }
 
 int Crypto::SetAesKey(unsigned char* aesKey, size_t aesKeyLen) {
-    if ((int) aesKeyLen != AES_KEYLEN / 16)
+    return this->SetAesKey256(aesKey, aesKeyLen, SECURITY_LEVEL::low);
+}
+
+int Crypto::SetAesKey256(unsigned char* aesKey, size_t aesKeyLen, SECURITY_LEVEL securityLevel) {
+    int keyUnit = 8;
+    if (securityLevel == SECURITY_LEVEL::low)
+        keyUnit = 16;
+
+    if ((int) aesKeyLen != AES_KEYLEN / keyUnit)
         return FAILURE;
 
-    memcpy(this->aesKey, aesKey, AES_KEYLEN / 16);
+    memcpy(this->aesKey, aesKey, AES_KEYLEN / keyUnit);
 
     return SUCCESS;
 }
 
 int Crypto::SetAesIv(unsigned char* aesIv, size_t aesIvLen) {
-    if ((int) aesIvLen != AES_KEYLEN / 16)
+    return this->SetAesIv256(aesIv, aesIvLen, SECURITY_LEVEL::low);
+}
+
+int Crypto::SetAesIv256(unsigned char* aesIv, size_t aesIvLen, SECURITY_LEVEL securityLevel) {
+    int keyUnit = 8;
+    if (securityLevel == SECURITY_LEVEL::low)
+        keyUnit = 16;
+
+    if ((int) aesIvLen != AES_KEYLEN / keyUnit)
         return FAILURE;
 
-    memcpy(this->aesIv, aesIv, AES_KEYLEN / 16);
+    memcpy(this->aesIv, aesIv, AES_KEYLEN / keyUnit);
 
     return SUCCESS;
 }
@@ -274,10 +319,10 @@ int Crypto::GenerateAesIv() {
     if (this->aesKey == NULL || this->aesIv == NULL)
         return FAILURE;
 
-    if (RAND_bytes(this->aesKey, AES_KEYLEN / 16) == 0)
+    if (RAND_bytes(this->aesKey, AES_KEYLEN / 8) == 0)
         return FAILURE;
 
-    if (RAND_bytes(this->aesIv, AES_KEYLEN / 16) == 0)
+    if (RAND_bytes(this->aesIv, AES_KEYLEN / 8) == 0)
         return FAILURE;
 
     return SUCCESS;
