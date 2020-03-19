@@ -58,7 +58,7 @@ namespace Json {
 #if __cplusplus >= 201103L || (defined(_CPPLIB_VER) && _CPPLIB_VER >= 520)
     using CharReaderPtr = std::unique_ptr<CharReader>;
 #else
-    typedef std::auto_ptr<CharReader> CharReaderPtr;
+    using CharReaderPtr = std::auto_ptr<CharReader>;
 #endif
 
 // Implementation of class Features
@@ -479,7 +479,7 @@ namespace Json {
                 Value numberName;
                 if (!decodeNumber(tokenName, numberName))
                     return recoverFromError(tokenObjectEnd);
-                name = String(numberName.asCString());
+                name = numberName.asString();
             } else {
                 break;
             }
@@ -644,7 +644,7 @@ namespace Json {
             Char c = *current++;
             if (c == '"')
                 break;
-            else if (c == '\\') {
+            if (c == '\\') {
                 if (current == end)
                     return addError("Empty escape sequence in string", token, current);
                 Char escape = *current++;
@@ -880,6 +880,7 @@ namespace Json {
         static OurFeatures all();
 
         bool allowComments_;
+        bool allowTrailingCommas_;
         bool strictRoot_;
         bool allowDroppedNullPlaceholders_;
         bool allowNumericKeys_;
@@ -1405,11 +1406,10 @@ namespace Json {
 
         while ((current_ + 1) < end_) {
             Char c = getNextChar();
-            if (c == '*' && *current_ == '/') {
+            if (c == '*' && *current_ == '/')
                 break;
-            } else if (c == '\n') {
+            if (c == '\n')
                 *containsNewLineResult = true;
-            }
         }
 
         return getNextChar() == '/';
@@ -1494,7 +1494,7 @@ namespace Json {
                 initialTokenOk = readToken(tokenName);
             if (!initialTokenOk)
                 break;
-            if (tokenName.type_ == tokenObjectEnd && name.empty()) // empty object
+            if (tokenName.type_ == tokenObjectEnd && (name.empty() || features_.allowTrailingCommas_)) // empty object or trailing comma
                 return true;
             name.clear();
             if (tokenName.type_ == tokenString) {
@@ -1548,15 +1548,15 @@ namespace Json {
         Value init(arrayValue);
         currentValue().swapPayload(init);
         currentValue().setOffsetStart(token.start_ - begin_);
-        skipSpaces();
-        if (current_ != end_ && *current_ == ']') // empty array
-        {
-            Token endArray;
-            readToken(endArray);
-            return true;
-        }
         int index = 0;
         for (;;) {
+            skipSpaces();
+            if (current_ != end_ && *current_ == ']' && (index == 0 || (features_.allowTrailingCommas_ && !features_.allowDroppedNullPlaceholders_))) // empty array or trailing comma
+            {
+                Token endArray;
+                readToken(endArray);
+                return true;
+            }
             Value& value = currentValue()[index++];
             nodes_.push(&value);
             bool ok = readValue();
@@ -1573,8 +1573,7 @@ namespace Json {
             bool badTokenType = (currentToken.type_ != tokenArraySeparator &&
                                  currentToken.type_ != tokenArrayEnd);
             if (!ok || badTokenType) {
-                return addErrorAndRecover("Missing ',' or ']' in array declaration",
-                                          currentToken, tokenArrayEnd);
+                return addErrorAndRecover("Missing ',' or ']' in array declaration", currentToken, tokenArrayEnd);
             }
             if (currentToken.type_ == tokenArrayEnd)
                 break;
@@ -1597,20 +1596,42 @@ namespace Json {
         // larger than the maximum supported value of an integer then
         // we decode the number as a double.
         Location current = token.start_;
-        bool isNegative = *current == '-';
+        const bool isNegative = *current == '-';
         if (isNegative)
             ++current;
 
-        static constexpr auto positive_threshold = Value::maxLargestUInt / 10;
-        static constexpr auto positive_last_digit = Value::maxLargestUInt % 10;
-        static constexpr auto negative_threshold =
-                Value::LargestUInt(Value::minLargestInt) / 10;
-        static constexpr auto negative_last_digit =
-                Value::LargestUInt(Value::minLargestInt) % 10;
+        // We assume we can represent the largest and smallest integer types as
+        // unsigned integers with separate sign. This is only true if they can fit
+        // into an unsigned integer.
+        static_assert(Value::maxLargestInt <= Value::maxLargestUInt,
+                      "Int must be smaller than UInt");
 
-        const auto threshold = isNegative ? negative_threshold : positive_threshold;
-        const auto last_digit =
-                isNegative ? negative_last_digit : positive_last_digit;
+        // We need to convert minLargestInt into a positive number. The easiest way
+        // to do this conversion is to assume our "threshold" value of minLargestInt
+        // divided by 10 can fit in maxLargestInt when absolute valued. This should
+        // be a safe assumption.
+        static_assert(Value::minLargestInt <= -Value::maxLargestInt,
+                      "The absolute value of minLargestInt must be greater than or "
+                      "equal to maxLargestInt");
+        static_assert(Value::minLargestInt / 10 >= -Value::maxLargestInt,
+                      "The absolute value of minLargestInt must be only 1 magnitude "
+                      "larger than maxLargest Int");
+
+        static constexpr Value::LargestUInt positive_threshold =
+                Value::maxLargestUInt / 10;
+        static constexpr Value::UInt positive_last_digit = Value::maxLargestUInt % 10;
+
+        // For the negative values, we have to be more careful. Since typically
+        // -Value::minLargestInt will cause an overflow, we first divide by 10 and
+        // then take the inverse. This assumes that minLargestInt is only a single
+        // power of 10 different in magnitude, which we check above. For the last
+        // digit, we take the modulus before negating for the same reason.
+        static constexpr auto negative_threshold = Value::LargestUInt(-(Value::minLargestInt / 10));
+
+        static constexpr auto negative_last_digit = Value::UInt(-(Value::minLargestInt % 10));
+
+        const Value::LargestUInt threshold = isNegative ? negative_threshold : positive_threshold;
+        const Value::UInt max_last_digit = isNegative ? negative_last_digit : positive_last_digit;
 
         Value::LargestUInt value = 0;
         while (current < token.end_) {
@@ -1625,19 +1646,22 @@ namespace Json {
                 // b) this is the last digit, or
                 // c) it's small enough to fit in that rounding delta, we're okay.
                 // Otherwise treat this number as a double to avoid overflow.
-                if (value > threshold || current != token.end_ || digit > last_digit) {
+                if (value > threshold || current != token.end_ || digit > max_last_digit) {
                     return decodeDouble(token, decoded);
                 }
             }
             value = value * 10 + digit;
         }
 
-        if (isNegative)
-            decoded = -Value::LargestInt(value);
-        else if (value <= Value::LargestUInt(Value::maxLargestInt))
+        if (isNegative) {
+            // We use the same magnitude assumption here, just in case.
+            const auto last_digit = static_cast<Value::UInt>(value % 10);
+            decoded = -Value::LargestInt(value / 10) * 10 - last_digit;
+        } else if (value <= Value::LargestUInt(Value::maxLargestInt)) {
             decoded = Value::LargestInt(value);
-        else
+        } else {
             decoded = value;
+        }
 
         return true;
     }
@@ -1654,37 +1678,11 @@ namespace Json {
 
     bool OurReader::decodeDouble(Token& token, Value& decoded) {
         double value = 0;
-        const int bufferSize = 32;
-        int count;
-        ptrdiff_t const length = token.end_ - token.start_;
-
-        // Sanity check to avoid buffer overflow exploits.
-        if (length < 0) {
-            return addError("Unable to parse token length", token);
+        const String buffer(token.start_, token.end_);
+        IStringStream is(buffer);
+        if (!(is >> value)) {
+            return addError("'" + String(token.start_, token.end_) + "' is not a number.", token);
         }
-        auto const ulength = static_cast<size_t>(length);
-
-        // Avoid using a string constant for the format control string given to
-        // sscanf, as this can cause hard to debug crashes on OS X. See here for more
-        // info:
-        //
-        //     http://developer.apple.com/library/mac/#DOCUMENTATION/DeveloperTools/gcc-4.0.1/gcc/Incompatibilities.html
-        char format[] = "%lf";
-
-        if (length <= bufferSize) {
-            Char buffer[bufferSize + 1];
-            memcpy(buffer, token.start_, ulength);
-            buffer[length] = 0;
-            fixNumericLocaleInput(buffer, buffer + length);
-            count = sscanf(buffer, format, &value);
-        } else {
-            String buffer(token.start_, token.end_);
-            count = sscanf(buffer.c_str(), format, &value);
-        }
-
-        if (count != 1)
-            return addError(
-                    "'" + String(token.start_, token.end_) + "' is not a number.", token);
         decoded = value;
         return true;
     }
@@ -1708,7 +1706,7 @@ namespace Json {
             Char c = *current++;
             if (c == '"')
                 break;
-            else if (c == '\\') {
+            if (c == '\\') {
                 if (current == end)
                     return addError("Empty escape sequence in string", token, current);
                 Char escape = *current++;
@@ -1926,6 +1924,7 @@ namespace Json {
         bool collectComments = settings_["collectComments"].asBool();
         OurFeatures features = OurFeatures::all();
         features.allowComments_ = settings_["allowComments"].asBool();
+        features.allowTrailingCommas_ = settings_["allowTrailingCommas"].asBool();
         features.strictRoot_ = settings_["strictRoot"].asBool();
         features.allowDroppedNullPlaceholders_ =
                 settings_["allowDroppedNullPlaceholders"].asBool();
@@ -1945,6 +1944,7 @@ namespace Json {
         valid_keys->clear();
         valid_keys->insert("collectComments");
         valid_keys->insert("allowComments");
+        valid_keys->insert("allowTrailingCommas");
         valid_keys->insert("strictRoot");
         valid_keys->insert("allowDroppedNullPlaceholders");
         valid_keys->insert("allowNumericKeys");
@@ -1981,6 +1981,7 @@ namespace Json {
     void CharReaderBuilder::strictMode(Json::Value* settings) {
         //! [CharReaderBuilderStrictMode]
         (*settings)["allowComments"] = false;
+        (*settings)["allowTrailingCommas"] = false;
         (*settings)["strictRoot"] = true;
         (*settings)["allowDroppedNullPlaceholders"] = false;
         (*settings)["allowNumericKeys"] = false;
@@ -1997,6 +1998,7 @@ namespace Json {
         //! [CharReaderBuilderDefaults]
         (*settings)["collectComments"] = true;
         (*settings)["allowComments"] = true;
+        (*settings)["allowTrailingCommas"] = true;
         (*settings)["strictRoot"] = false;
         (*settings)["allowDroppedNullPlaceholders"] = false;
         (*settings)["allowNumericKeys"] = false;
