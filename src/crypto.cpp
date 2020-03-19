@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include <syscall.h>
+// #include <syscall.h>
 #include <utils/crypto/crypto.h>
 
 using namespace std;
@@ -161,36 +161,36 @@ int Crypto::AesDecrypt256(unsigned char* encMsg, size_t encMsgLen, unsigned char
     return (int) decLen;
 }
 
-int Crypto::SetAesKey(unsigned char* aesKey, size_t aesKeyLen) {
-    return this->SetAesKey256(aesKey, aesKeyLen, low);
+int Crypto::SetAesKey(unsigned char* key, size_t keyLen) {
+    return this->SetAesKey256(key, keyLen, low);
 }
 
-int Crypto::SetAesKey256(unsigned char* aesKey, size_t aesKeyLen, SECURITY_LEVEL securityLevel) {
+int Crypto::SetAesKey256(unsigned char* key, size_t keyLen, SECURITY_LEVEL securityLevel) {
     int keyUnit = 8;
     if (securityLevel == low)
         keyUnit = 16;
 
-    if ((int) aesKeyLen != AES_KEYLEN / keyUnit)
+    if ((int) keyLen != AES_KEYLEN / keyUnit)
         return FAILURE;
 
-    memcpy(this->aesKey, aesKey, AES_KEYLEN / keyUnit);
+    memcpy(this->aesKey, key, AES_KEYLEN / keyUnit);
 
     return SUCCESS;
 }
 
-int Crypto::SetAesIv(unsigned char* aesIv, size_t aesIvLen) {
-    return this->SetAesIv256(aesIv, aesIvLen, low);
+int Crypto::SetAesIv(unsigned char* iv, size_t ivLen) {
+    return this->SetAesIv256(iv, ivLen, low);
 }
 
-int Crypto::SetAesIv256(unsigned char* aesIv, size_t aesIvLen, SECURITY_LEVEL securityLevel) {
+int Crypto::SetAesIv256(unsigned char* iv, size_t ivLen, SECURITY_LEVEL securityLevel) {
     int keyUnit = 8;
     if (securityLevel == low)
         keyUnit = 16;
 
-    if ((int) aesIvLen != AES_KEYLEN / keyUnit)
+    if ((int) ivLen != AES_KEYLEN / keyUnit)
         return FAILURE;
 
-    memcpy(this->aesIv, aesIv, AES_KEYLEN / keyUnit);
+    memcpy(this->aesIv, iv, AES_KEYLEN / keyUnit);
 
     return SUCCESS;
 }
@@ -263,6 +263,8 @@ int Crypto::SetRsaLocalPubKey(unsigned char* key, size_t keyLen) {
         return FAILURE;
 
     BIO_free_all(bio);
+
+    return SUCCESS;
 }
 
 int Crypto::SetRsaLocalPriKey(unsigned char* key, size_t keyLen) {
@@ -273,6 +275,8 @@ int Crypto::SetRsaLocalPriKey(unsigned char* key, size_t keyLen) {
 
     PEM_read_bio_RSAPrivateKey(bio, &this->rsaLocalPriKey, NULL, NULL);
     BIO_free_all(bio);
+
+    return SUCCESS;
 }
 
 int Crypto::SetRsaRemotePubKey(unsigned char* key, size_t keyLen) {
@@ -286,6 +290,8 @@ int Crypto::SetRsaRemotePubKey(unsigned char* key, size_t keyLen) {
         return FAILURE;
 
     BIO_free_all(bio);
+
+    return SUCCESS;
 }
 
 int Crypto::WriteKeyToFile(FILE* fd, int key) {
