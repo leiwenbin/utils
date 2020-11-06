@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <sstream>
 #include <utility>
 
@@ -212,9 +213,9 @@ namespace Json {
 
     Exception::Exception(String msg) : msg_(std::move(msg)) {}
 
-    Exception::~Exception() JSONCPP_NOEXCEPT = default;
+    Exception::~Exception() noexcept = default;
 
-    char const* Exception::what() const JSONCPP_NOEXCEPT { return msg_.c_str(); }
+    char const* Exception::what() const noexcept { return msg_.c_str(); }
 
     RuntimeError::RuntimeError(String const& msg) : Exception(msg) {}
 
@@ -229,11 +230,14 @@ namespace Json {
     }
 
 #else // !JSON_USE_EXCEPTION
-
-    JSONCPP_NORETURN void throwRuntimeError(String const& msg) { abort(); }
-
-    JSONCPP_NORETURN void throwLogicError(String const& msg) { abort(); }
-
+    JSONCPP_NORETURN void throwRuntimeError(String const& msg) {
+        std::cerr << msg << std::endl;
+        abort();
+    }
+    JSONCPP_NORETURN void throwLogicError(String const& msg) {
+        std::cerr << msg << std::endl;
+        abort();
+    }
 #endif
 
 // //////////////////////////////////////////////////////////////////
@@ -666,7 +670,8 @@ namespace Json {
                 return valueToString(value_.uint_);
             case realValue:
                 return valueToString(value_.real_);
-            default: JSON_FAIL_MESSAGE("Type is not convertible to string");
+            default:
+                JSON_FAIL_MESSAGE("Type is not convertible to string");
         }
     }
 

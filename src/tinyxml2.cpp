@@ -23,12 +23,14 @@
 
 #include <utils/xml/tinyxml2.h>
 
-#include <new>		// yes, this one new style header, is in the Android SDK.
+#include <new>        // yes, this one new style header, is in the Android SDK.
 
 #ifdef ANDROID_NDK
-    #include <stddef.h>
+#include <stddef.h>
 #else
-    #include <cstddef>
+
+#include <cstddef>
+
 #endif
 
 static const char LINE_FEED = (char) 0x0a;            // all line endings are normalized to LF

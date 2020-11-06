@@ -13,6 +13,7 @@
 
 #endif // if !defined(JSON_IS_AMALGAMATION)
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -81,10 +82,7 @@ namespace Json {
 // ////////////////////////////////
 
     bool Reader::containsNewLine(Reader::Location begin, Reader::Location end) {
-        for (; begin < end; ++begin)
-            if (*begin == '\n' || *begin == '\r')
-                return true;
-        return false;
+        return std::any_of(begin, end, [](char b) { return b == '\n' || b == '\r'; });
     }
 
 // Class Reader
@@ -888,6 +886,7 @@ namespace Json {
         bool failIfExtra_;
         bool rejectDupKeys_;
         bool allowSpecialFloats_;
+        bool skipBom_;
         size_t stackLimit_;
     }; // OurFeatures
 
@@ -960,6 +959,8 @@ namespace Json {
         bool readToken(Token& token);
 
         void skipSpaces();
+
+        void skipBom(bool skipBom);
 
         bool match(const Char* pattern, int patternLength);
 
@@ -1044,12 +1045,8 @@ namespace Json {
 
 // complete copy of Read impl, for OurReader
 
-    bool OurReader::containsNewLine(OurReader::Location begin,
-                                    OurReader::Location end) {
-        for (; begin < end; ++begin)
-            if (*begin == '\n' || *begin == '\r')
-                return true;
-        return false;
+    bool OurReader::containsNewLine(OurReader::Location begin, OurReader::Location end) {
+        return std::any_of(begin, end, [](char b) { return b == '\n' || b == '\r'; });
     }
 
     OurReader::OurReader(OurFeatures const& features) : features_(features) {}
@@ -1072,6 +1069,8 @@ namespace Json {
             nodes_.pop();
         nodes_.push(&root);
 
+        // skip byte order mark if it exists at the beginning of the UTF-8 text.
+        skipBom(features_.skipBom_);
         bool successful = readValue();
         nodes_.pop();
         Token token;
@@ -1232,8 +1231,11 @@ namespace Json {
                 if (features_.allowSingleQuotes_) {
                     token.type_ = tokenString;
                     ok = readStringSingleQuote();
-                    break;
-                } // else fall through
+                } else {
+                    // If we don't allow single quotes, this is a failure case.
+                    ok = false;
+                }
+                break;
             case '/':
                 token.type_ = tokenComment;
                 ok = readComment();
@@ -1321,6 +1323,16 @@ namespace Json {
                 ++current_;
             else
                 break;
+        }
+    }
+
+    void OurReader::skipBom(bool skipBom) {
+        // The default behavior is to skip BOM.
+        if (skipBom) {
+            if ((end_ - begin_) >= 3 && strncmp(begin_, "\xEF\xBB\xBF", 3) == 0) {
+                begin_ += 3;
+                current_ = begin_;
+            }
         }
     }
 
@@ -1937,40 +1949,35 @@ namespace Json {
         features.failIfExtra_ = settings_["failIfExtra"].asBool();
         features.rejectDupKeys_ = settings_["rejectDupKeys"].asBool();
         features.allowSpecialFloats_ = settings_["allowSpecialFloats"].asBool();
+        features.skipBom_ = settings_["skipBom"].asBool();
         return new OurCharReader(collectComments, features);
     }
 
-    static void getValidReaderKeys(std::set<String>* valid_keys) {
-        valid_keys->clear();
-        valid_keys->insert("collectComments");
-        valid_keys->insert("allowComments");
-        valid_keys->insert("allowTrailingCommas");
-        valid_keys->insert("strictRoot");
-        valid_keys->insert("allowDroppedNullPlaceholders");
-        valid_keys->insert("allowNumericKeys");
-        valid_keys->insert("allowSingleQuotes");
-        valid_keys->insert("stackLimit");
-        valid_keys->insert("failIfExtra");
-        valid_keys->insert("rejectDupKeys");
-        valid_keys->insert("allowSpecialFloats");
-    }
-
     bool CharReaderBuilder::validate(Json::Value* invalid) const {
-        Json::Value my_invalid;
-        if (!invalid)
-            invalid = &my_invalid; // so we do not need to test for NULL
-        Json::Value& inv = *invalid;
-        std::set<String> valid_keys;
-        getValidReaderKeys(&valid_keys);
-        Value::Members keys = settings_.getMemberNames();
-        size_t n = keys.size();
-        for (size_t i = 0; i < n; ++i) {
-            String const& key = keys[i];
-            if (valid_keys.find(key) == valid_keys.end()) {
-                inv[key] = settings_[key];
-            }
+        static const auto& valid_keys = *new std::set<String>{
+                "collectComments",
+                "allowComments",
+                "allowTrailingCommas",
+                "strictRoot",
+                "allowDroppedNullPlaceholders",
+                "allowNumericKeys",
+                "allowSingleQuotes",
+                "stackLimit",
+                "failIfExtra",
+                "rejectDupKeys",
+                "allowSpecialFloats",
+                "skipBom",
+        };
+        for (auto si = settings_.begin(); si != settings_.end(); ++si) {
+            auto key = si.name();
+            if (valid_keys.count(key))
+                continue;
+            if (invalid)
+                (*invalid)[std::move(key)] = *si;
+            else
+                return false;
         }
-        return inv.empty();
+        return invalid ? invalid->empty() : true;
     }
 
     Value& CharReaderBuilder::operator[](const String& key) {
@@ -1990,6 +1997,7 @@ namespace Json {
         (*settings)["failIfExtra"] = true;
         (*settings)["rejectDupKeys"] = true;
         (*settings)["allowSpecialFloats"] = false;
+        (*settings)["skipBom"] = true;
         //! [CharReaderBuilderStrictMode]
     }
 
@@ -2007,6 +2015,7 @@ namespace Json {
         (*settings)["failIfExtra"] = false;
         (*settings)["rejectDupKeys"] = false;
         (*settings)["allowSpecialFloats"] = false;
+        (*settings)["skipBom"] = true;
         //! [CharReaderBuilderDefaults]
     }
 
