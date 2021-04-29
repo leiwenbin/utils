@@ -12,9 +12,7 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cctype>
 #include <cstring>
-#include <iomanip>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -1267,7 +1265,7 @@ namespace Json {
             else
                 return false;
         }
-        return invalid ? invalid->empty() : true;
+        return invalid == NULL || invalid->empty();
     }
 
     Value& StreamWriterBuilder::operator[](const String& key) {

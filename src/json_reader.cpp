@@ -16,12 +16,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iostream>
 #include <istream>
 #include <limits>
 #include <memory>
 #include <set>
-#include <sstream>
 #include <utility>
 
 #include <cstdio>
@@ -70,7 +68,7 @@ namespace Json {
     Features Features::all() { return {}; }
 
     Features Features::strictMode() {
-        Features features;
+        Features features;/**/
         features.allowComments_ = false;
         features.strictRoot_ = true;
         features.allowDroppedNullPlaceholders_ = false;
@@ -1977,7 +1975,7 @@ namespace Json {
             else
                 return false;
         }
-        return invalid ? invalid->empty() : true;
+        return invalid == NULL || invalid->empty();
     }
 
     Value& CharReaderBuilder::operator[](const String& key) {

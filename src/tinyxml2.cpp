@@ -408,7 +408,7 @@ namespace tinyxml2 {
     bool XMLUtil::ToBool(const char* str, bool* value) {
         int ival = 0;
         if (ToInt(str, &ival)) {
-            *value = (ival == 0) ? false : true;
+            *value = ival != 0;
             return true;
         }
         if (StringEqual(str, "true")) {
