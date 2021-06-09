@@ -16,10 +16,12 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <istream>
 #include <limits>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <utility>
 
 #include <cstdio>
@@ -106,8 +108,7 @@ namespace Json {
 
         // Since String is reference-counted, this at least does not
         // create an extra copy.
-        String doc;
-        std::getline(is, doc, static_cast<char> EOF);
+        String doc(std::istreambuf_iterator<char>(is), {});
         return parse(doc.data(), doc.data() + doc.size(), root, collectComments);
     }
 
@@ -1971,7 +1972,7 @@ namespace Json {
             if (valid_keys.count(key))
                 continue;
             if (invalid)
-                (*invalid)[std::move(key)] = *si;
+                (*invalid)[key] = *si;
             else
                 return false;
         }

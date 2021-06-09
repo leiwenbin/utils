@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <sstream>
 #include <utility>
 
@@ -276,7 +277,7 @@ namespace Json {
         storage_.length_ = other.storage_.length_;
     }
 
-    Value::CZString::CZString(CZString&& other)
+    Value::CZString::CZString(CZString&& other) noexcept
             : cstr_(other.cstr_), index_(other.index_) {
         other.cstr_ = nullptr;
     }
@@ -302,7 +303,7 @@ namespace Json {
         return *this;
     }
 
-    Value::CZString& Value::CZString::operator=(CZString&& other) {
+    Value::CZString& Value::CZString::operator=(CZString&& other) noexcept {
         cstr_ = other.cstr_;
         index_ = other.index_;
         other.cstr_ = nullptr;
@@ -456,7 +457,7 @@ namespace Json {
         dupMeta(other);
     }
 
-    Value::Value(Value&& other) {
+    Value::Value(Value&& other) noexcept {
         initBasic(nullValue);
         swap(other);
     }
@@ -471,7 +472,7 @@ namespace Json {
         return *this;
     }
 
-    Value& Value::operator=(Value&& other) {
+    Value& Value::operator=(Value&& other) noexcept {
         other.swap(*this);
         return *this;
     }
@@ -936,7 +937,8 @@ namespace Json {
         if (newSize == 0)
             clear();
         else if (newSize > oldSize)
-            this->operator[](newSize - 1);
+            for (ArrayIndex i = oldSize; i < newSize; ++i)
+                (*this)[i];
         else {
             for (ArrayIndex index = newSize; index < oldSize; ++index) {
                 value_.map_->erase(index);
@@ -1384,8 +1386,8 @@ namespace Json {
                 return value_.real_ >= double(minInt64) &&
                        value_.real_ < maxUInt64AsDouble && IsIntegral(value_.real_);
 #else
-            return value_.real_ >= minInt && value_.real_ <= maxUInt &&
-                   IsIntegral(value_.real_);
+                return value_.real_ >= minInt && value_.real_ <= maxUInt &&
+                       IsIntegral(value_.real_);
 #endif // JSON_HAS_INT64
             default:
                 break;
@@ -1408,14 +1410,14 @@ namespace Json {
     Value::Comments::Comments(const Comments& that)
             : ptr_{cloneUnique<Array>(that.ptr_)} {}
 
-    Value::Comments::Comments(Comments&& that) : ptr_{std::move(that.ptr_)} {}
+    Value::Comments::Comments(Comments&& that) noexcept: ptr_{std::move(that.ptr_)} {}
 
     Value::Comments& Value::Comments::operator=(const Comments& that) {
         ptr_ = cloneUnique<Array>(that.ptr_);
         return *this;
     }
 
-    Value::Comments& Value::Comments::operator=(Comments&& that) {
+    Value::Comments& Value::Comments::operator=(Comments&& that) noexcept {
         ptr_ = std::move(that.ptr_);
         return *this;
     }
@@ -1431,13 +1433,11 @@ namespace Json {
     }
 
     void Value::Comments::set(CommentPlacement slot, String comment) {
-        if (!ptr_) {
+        if (slot >= CommentPlacement::numberOfCommentPlacement)
+            return;
+        if (!ptr_)
             ptr_ = std::unique_ptr<Array>(new Array());
-        }
-        // check comments array boundry.
-        if (slot < CommentPlacement::numberOfCommentPlacement) {
-            (*ptr_)[slot] = std::move(comment);
-        }
+        (*ptr_)[slot] = std::move(comment);
     }
 
     void Value::setComment(String comment, CommentPlacement placement) {

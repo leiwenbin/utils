@@ -12,7 +12,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cstring>
+#include <iomanip>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -71,7 +73,7 @@
 
 #if !defined(isnan)
 // IEEE standard states that NaN values will not compare to themselves
-#define isnan(x) (x != x)
+#define isnan(x) ((x) != (x))
 #endif
 
 #if !defined(__APPLE__)
@@ -157,16 +159,18 @@ namespace Json {
 
             buffer.erase(fixNumericLocale(buffer.begin(), buffer.end()), buffer.end());
 
-            // strip the zero padding from the right
-            if (precisionType == PrecisionType::decimalPlaces) {
-                buffer.erase(fixZerosInTheEnd(buffer.begin(), buffer.end()), buffer.end());
-            }
-
             // try to ensure we preserve the fact that this was given to us as a double on
             // input
             if (buffer.find('.') == buffer.npos && buffer.find('e') == buffer.npos) {
                 buffer += ".0";
             }
+
+            // strip the zero padding from the right
+            if (precisionType == PrecisionType::decimalPlaces) {
+                buffer.erase(fixZerosInTheEnd(buffer.begin(), buffer.end(), precision),
+                             buffer.end());
+            }
+
             return buffer;
         }
     } // namespace
@@ -273,8 +277,7 @@ namespace Json {
         result.append("\\u").append(toHex16Bit(ch));
     }
 
-    static String valueToQuotedStringN(const char* value, unsigned length,
-                                       bool emitUTF8 = false) {
+    static String valueToQuotedStringN(const char* value, size_t length, bool emitUTF8 = false) {
         if (value == nullptr)
             return "";
 
@@ -352,7 +355,7 @@ namespace Json {
     }
 
     String valueToQuotedString(const char* value) {
-        return valueToQuotedStringN(value, static_cast<unsigned int>(strlen(value)));
+        return valueToQuotedStringN(value, strlen(value));
     }
 
 // Class Writer
@@ -403,7 +406,7 @@ namespace Json {
                 char const* end;
                 bool ok = value.getString(&str, &end);
                 if (ok)
-                    document_ += valueToQuotedStringN(str, static_cast<unsigned>(end - str));
+                    document_ += valueToQuotedStringN(str, static_cast<size_t>(end - str));
                 break;
             }
             case booleanValue:
@@ -427,8 +430,7 @@ namespace Json {
                     const String& name = *it;
                     if (it != members.begin())
                         document_ += ',';
-                    document_ += valueToQuotedStringN(name.data(),
-                                                      static_cast<unsigned>(name.length()));
+                    document_ += valueToQuotedStringN(name.data(), name.length());
                     document_ += yamlCompatibilityEnabled_ ? ": " : ":";
                     writeValue(value[name]);
                 }
@@ -475,7 +477,7 @@ namespace Json {
                 char const* end;
                 bool ok = value.getString(&str, &end);
                 if (ok)
-                    pushValue(valueToQuotedStringN(str, static_cast<unsigned>(end - str)));
+                    pushValue(valueToQuotedStringN(str, static_cast<size_t>(end - str)));
                 else
                     pushValue("");
                 break;
@@ -517,7 +519,7 @@ namespace Json {
     }
 
     void StyledWriter::writeArrayValue(const Value& value) {
-        unsigned size = value.size();
+        size_t size = value.size();
         if (size == 0)
             pushValue("[]");
         else {
@@ -526,7 +528,7 @@ namespace Json {
                 writeWithIndent("[");
                 indent();
                 bool hasChildValue = !childValues_.empty();
-                unsigned index = 0;
+                ArrayIndex index = 0;
                 for (;;) {
                     const Value& childValue = value[index];
                     writeCommentBeforeValue(childValue);
@@ -549,7 +551,7 @@ namespace Json {
             {
                 assert(childValues_.size() == size);
                 document_ += "[ ";
-                for (unsigned index = 0; index < size; ++index) {
+                for (size_t index = 0; index < size; ++index) {
                     if (index > 0)
                         document_ += ", ";
                     document_ += childValues_[index];
@@ -695,7 +697,7 @@ namespace Json {
                 char const* end;
                 bool ok = value.getString(&str, &end);
                 if (ok)
-                    pushValue(valueToQuotedStringN(str, static_cast<unsigned>(end - str)));
+                    pushValue(valueToQuotedStringN(str, static_cast<size_t>(end - str)));
                 else
                     pushValue("");
                 break;
@@ -928,10 +930,10 @@ namespace Json {
         String colonSymbol_;
         String nullSymbol_;
         String endingLineFeedSymbol_;
-        bool addChildValues_ : 1;
-        bool indented_ : 1;
-        bool useSpecialFloats_ : 1;
-        bool emitUTF8_ : 1;
+        bool addChildValues_: 1;
+        bool indented_: 1;
+        bool useSpecialFloats_: 1;
+        bool emitUTF8_: 1;
         unsigned int precision_;
         PrecisionType precisionType_;
     };
@@ -993,8 +995,7 @@ namespace Json {
                 char const* end;
                 bool ok = value.getString(&str, &end);
                 if (ok)
-                    pushValue(valueToQuotedStringN(str, static_cast<unsigned>(end - str),
-                                                   emitUTF8_));
+                    pushValue(valueToQuotedStringN(str, static_cast<size_t>(end - str), emitUTF8_));
                 else
                     pushValue("");
                 break;
@@ -1017,8 +1018,7 @@ namespace Json {
                         String const& name = *it;
                         Value const& childValue = value[name];
                         writeCommentBeforeValue(childValue);
-                        writeWithIndent(valueToQuotedStringN(
-                                name.data(), static_cast<unsigned>(name.length()), emitUTF8_));
+                        writeWithIndent(valueToQuotedStringN(name.data(), name.length(), emitUTF8_));
                         *sout_ << colonSymbol_;
                         writeValue(childValue);
                         if (++it == members.end()) {
@@ -1261,7 +1261,7 @@ namespace Json {
             if (valid_keys.count(key))
                 continue;
             if (invalid)
-                (*invalid)[std::move(key)] = *si;
+                (*invalid)[key] = *si;
             else
                 return false;
         }
